@@ -13,7 +13,10 @@ GOOGLE_SESION_ENDPOINT = "/api/auth/google/sesion"
 
 # Explorador de TerraSprout (src/explorador.py, mapa y datos NASA). Solo en la versión web: si está vacío, el home no
 # muestra la tarjeta. En el VPS: https://explorador.<dominio>/
-EXPLORADOR_URL = os.getenv("TERRACODE_EXPLORADOR_URL", "").strip()
+EXPLORADOR_URL = os.getenv("TERRACODE_EXPLORADOR_URL", "").strip().rstrip("/")
+if EXPLORADOR_URL and "://" not in EXPLORADOR_URL:  # solo el dominio (EXPLORADOR_DOMINIO del docker-compose)
+    EXPLORADOR_URL = f"https://{EXPLORADOR_URL}"
+EXPLORADOR_URL = f"{EXPLORADOR_URL}/" if EXPLORADOR_URL else ""
 
 # Segundos máximos de espera por respuesta del backend.
 REQUEST_TIMEOUT = float(os.getenv("TERRACODE_REQUEST_TIMEOUT", "10"))
