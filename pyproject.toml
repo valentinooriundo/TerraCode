@@ -8,7 +8,11 @@ authors = [
     { name = "Flet developer", email = "you@example.com" }
 ]
 dependencies = [
-    "flet>=1.1.2"
+    "flet>=1.1.2",
+    # GPS del celular para el registro de campo
+    "flet-geolocator==1.1.2",
+    # Certificados raíz para HTTPS (api.rapiditto.com) dentro del APK y en Windows
+    "certifi>=2024.8.30",
 ]
 
 [dependency-groups]
@@ -27,9 +31,9 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 
 [tool.flet]
-org = "com.mycompany"
-product = "terracode"
-company = "Flet"
+org = "com.terracode"
+product = "TerraCode"
+company = "TerraCode"
 copyright = "Copyright (C) 2023-2026 by Flet"
 
 # src/assets/icon.png is the icon for every platform. Keep it transparent and
@@ -41,3 +45,11 @@ copyright = "Copyright (C) 2023-2026 by Flet"
 
 [tool.flet.app]
 path = "src"
+
+# Ubicación de la parcela en el registro de campo
+[tool.flet.android.permission]
+"android.permission.ACCESS_FINE_LOCATION" = true
+"android.permission.ACCESS_COARSE_LOCATION" = true
+
+[tool.flet.ios.info]
+NSLocationWhenInUseUsageDescription = "TerraCode usa tu ubicación para registrar la parcela y recomendar cultivos."
