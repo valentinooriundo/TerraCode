@@ -30,11 +30,10 @@ def build_home_view(
     on_logout: Callable[[], None],
     on_nuevo_registro: Callable[[], None],
     on_ver_registros: Callable[[], None],
+    on_historial: Callable[[], None],
+    on_clima: Callable[[], None],
 ) -> ft.Control:
     name = session.display_name
-
-    def notify(msg: str):
-        page.show_dialog(ft.SnackBar(content=ft.Text(msg)))
 
     def action_card(icon, title: str, subtitle: str, on_click) -> ft.Control:
         return ft.Container(
@@ -59,9 +58,6 @@ def build_home_view(
                 ],
             ),
         )
-
-    def coming_soon(feature: str):
-        return lambda e: notify(f"{feature}: próximamente")
 
     header = ft.Row(
         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -140,8 +136,10 @@ def build_home_view(
                         lambda e: on_nuevo_registro()),
             action_card(ft.Icons.GRASS, "Mis registros", "Lleva el control de tus parcelas",
                         lambda e: on_ver_registros()),
-            action_card(ft.Icons.HISTORY, "Historial", "Revisa análisis anteriores", coming_soon("Historial")),
-            action_card(ft.Icons.WB_SUNNY_OUTLINED, "Clima", "Pronóstico para tu zona", coming_soon("Clima")),
+            action_card(ft.Icons.HISTORY, "Historial", "Resumen de tus registros",
+                        lambda e: on_historial()),
+            action_card(ft.Icons.WB_SUNNY_OUTLINED, "Clima", "Pronóstico para tu zona",
+                        lambda e: on_clima()),
         ],
     )
 

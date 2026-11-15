@@ -128,6 +128,20 @@ def refresh(session: Session) -> Session:
     return _session(_post(config.REFRESH_ENDPOINT, {"refreshToken": session.refresh_token}))
 
 
+def google_inicio(desafio: str, canal: str = CANAL_WEB) -> dict:
+    """Login con Google, paso 1. Devuelve {"id", "url", "expiraEn"}: abrir ``url`` en el navegador externo.
+
+    ``desafio`` es el SHA-256 en hexadecimal del verificador secreto que solo guarda la app.
+    """
+    return _post(config.GOOGLE_INICIO_ENDPOINT, {"canal": canal, "desafio": desafio})
+
+
+def google_sesion(inicio_id: str, verificador: str) -> Session | None:
+    """Login con Google, paso 3. ``None`` mientras el usuario no termina en Google (el backend responde 202)."""
+    data = _post(config.GOOGLE_SESION_ENDPOINT, {"id": inicio_id, "verificador": verificador})
+    return _session(data) if data.get("accessToken") else None
+
+
 def logout(session: Session) -> None:
     """Cierra la sesión en el servidor. Si no hay conexión, se ignora: el token expira solo."""
     try:

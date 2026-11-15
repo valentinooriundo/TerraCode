@@ -1,8 +1,11 @@
 import asyncio
+import hashlib
 import re
+import secrets
 from typing import Callable
 
 import flet as ft
+from flet.controls.services.url_launcher import LaunchMode
 
 import theme
 
@@ -85,6 +88,79 @@ def build_login_view(page: ft.Page, on_success: Callable[[Session], None]) -> ft
         color=theme.TEXT_ON_PRIMARY,
     )
 
+    # ---------- Login con Google ----------
+    # La app guarda un verificador secreto y solo envía su SHA-256. Abre Google en el navegador externo (Google no
+    # permite iniciar sesión dentro de la app) y pregunta al backend cada 2 s hasta que el usuario vuelva.
+
+    google_estado: dict = {"activo": False}
+    google_espera = ft.Row(
+        visible=False,
+        alignment=ft.MainAxisAlignment.CENTER,
+        spacing=10,
+        controls=[
+            ft.ProgressRing(width=16, height=16, stroke_width=2),
+            ft.Text("Esperando a Google… completa el inicio en el navegador", size=12, color=theme.TEXT_MUTED),
+        ],
+    )
+
+    def fin_google(mensaje: str | None = None):
+        google_estado["activo"] = False
+        google_espera.visible = False
+        boton_cancelar.visible = False
+        boton_google.disabled = False
+        set_busy(False)
+        if mensaje:
+            error.value = mensaje
+            error.visible = True
+        page.update()
+
+    async def login_google(e):
+        if google_estado["activo"]:
+            return
+        error.visible = False
+        verificador = secrets.token_urlsafe(48)
+        desafio = hashlib.sha256(verificador.encode("utf-8")).hexdigest()
+        google_estado["activo"] = True
+        boton_google.disabled = True
+        set_busy(True)
+        page.update()
+        try:
+            inicio = await asyncio.to_thread(auth_service.google_inicio, desafio, _canal(page))
+            await ft.UrlLauncher().launch_url(inicio["url"], mode=LaunchMode.EXTERNAL_APPLICATION)
+        except AuthError as ex:
+            fin_google(str(ex))
+            return
+        except Exception:
+            fin_google("No se pudo abrir el navegador para iniciar sesión con Google")
+            return
+
+        google_espera.visible = True
+        boton_cancelar.visible = True
+        page.update()
+        # Hasta 10 minutos (vigencia del inicio en el backend)
+        for _ in range(300):
+            await asyncio.sleep(2)
+            if not google_estado["activo"]:
+                return  # canceló
+            try:
+                session = await asyncio.to_thread(auth_service.google_sesion, inicio["id"], verificador)
+            except AuthError as ex:
+                fin_google(str(ex))
+                return
+            if session is not None:
+                google_estado["activo"] = False
+                on_success(session)
+                return
+        fin_google("Se agotó el tiempo para iniciar sesión con Google. Vuelve a intentarlo")
+
+    boton_google = ft.OutlinedButton(
+        content="Continuar con Google",
+        icon=ft.Icons.ACCOUNT_CIRCLE_OUTLINED,
+        width=320,
+        on_click=login_google,
+    )
+    boton_cancelar = ft.TextButton(content="Cancelar", visible=False, on_click=lambda e: fin_google())
+
     return ft.Container(
         alignment=ft.Alignment.CENTER,
         expand=True,
@@ -106,6 +182,17 @@ def build_login_view(page: ft.Page, on_success: Callable[[Session], None]) -> ft
                 error,
                 submit,
                 loading,
+                ft.Row(
+                    width=320,
+                    controls=[
+                        ft.Divider(expand=True, color=theme.BORDER_SUBTLE),
+                        ft.Text("o", size=12, color=theme.TEXT_MUTED),
+                        ft.Divider(expand=True, color=theme.BORDER_SUBTLE),
+                    ],
+                ),
+                boton_google,
+                google_espera,
+                boton_cancelar,
             ],
         ),
     )

@@ -7,6 +7,8 @@ from services import auth_service
 from services.api_client import ApiClient
 from services.auth_service import Session
 import theme
+from views.clima_view import build_clima_view
+from views.historial_view import build_historial_view
 from views.home_view import build_home_view
 from views.login_view import build_login_view
 from views.registro_view import build_registro_view
@@ -53,7 +55,8 @@ def main(page: ft.Page):
 
     def show_home():
         show(build_home_view(page, state["session"], on_logout=logout,
-                             on_nuevo_registro=show_registro, on_ver_registros=show_registros))
+                             on_nuevo_registro=show_registro, on_ver_registros=show_registros,
+                             on_historial=show_historial, on_clima=show_clima))
 
     def show_registro():
         show(build_registro_view(page, state["api"], geo, on_back=show_home, on_saved=show_registros,
@@ -62,6 +65,13 @@ def main(page: ft.Page):
     def show_registros():
         show(build_registros_view(page, state["api"], on_back=show_home, on_nuevo=show_registro,
                                   on_session_expired=show_login))
+
+    def show_historial():
+        show(build_historial_view(page, state["api"], on_back=show_home, on_nuevo=show_registro,
+                                  on_session_expired=show_login))
+
+    def show_clima():
+        show(build_clima_view(page, geo, on_back=show_home))
 
     def on_login(session: Session):
         state["session"] = session
