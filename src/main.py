@@ -57,7 +57,7 @@ def web_location_allowed(url):
 
 
 async def main(page: ft.Page):
-    page.title = "TerraSprout · Explorador agrícola"
+    page.title = "TerraCode · Explorador agrícola"
     page.theme = ft.Theme(color_scheme_seed="#21694E")
     page.theme_mode = ft.ThemeMode.LIGHT
     page.bgcolor = "#EFF4EF"

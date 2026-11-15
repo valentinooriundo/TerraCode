@@ -20,7 +20,7 @@ function active(name) {
 const brand = `
   <img src="logo.webp" width="40" height="40" alt="">
   <span translate="no" class="notranslate">
-    TerraSprout
+    TerraCode
   </span>
 `;
 
