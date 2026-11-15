@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Explora parcelas agrícolas con mapas y datos de la NASA.">
+<title>TerraCode | NASA Space Apps Challenge</title>
+<link rel="icon" href="logo.webp">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="../terra-language.css">
+<script src="../terra-language.js"></script>
+<script src="team.js" defer></script>
+<script src="site-chrome.js" defer></script>
+<script src="header.js" defer></script>
+<script src="journey.js" defer></script>
+<script src="video.js" defer></script>
+<script src="landing-language.js" defer></script>
+<link rel="stylesheet" href="../assistant-globe.css?v=modal-2">
+<script type="module" src="../assistant-launcher.js?v=modal-2"></script>
+</head>
+<body>
+<header data-site-header></header>
+<main id="inicio">
+<div class="journey" data-journey>
+<figure class="journey-stage">
+  <img src="../earth--75.webp" width="512" height="512" alt="Imagen satelital de la Tierra">
+  <figcaption>Blue Marble · NASA</figcaption>
+</figure>
+<section class="hero">
+<div class="wrap">
+<div>
+<p class="label">NASA Space Apps Challenge 2026</p>
+<h1>Del espacio<br>al campo<span>.</span></h1>
+<p class="intro">Explora el clima de tu parcela con datos de la NASA y compara rotaciones de cultivo según la demanda de agua y la cobertura del suelo.</p>
+<div class="links calls"><a class="action" href="../mapa?accion=ubicacion" target="_top">Mi ubicación</a><a href="../mapa?accion=buscar" target="_top">Buscar</a></div>
+<a class="scroll-link" href="#proyecto">Conoce el proyecto ↓</a>
+</div>
+</div>
+</section>
+<section id="proyecto" class="wrap grid story">
+<div class="story-heading">
+<p class="label">El proyecto</p>
+<h2>Datos del espacio,<br>para decisiones en la tierra.</h2>
+<p>TerraCode transforma información climática y satelital en recomendaciones agrícolas fáciles de comprender. Nuestra propuesta para el reto Field Shift ayuda a productores y emprendedores a evaluar parcelas, anticiparse a las condiciones ambientales y planificar cultivos con mayor confianza.</p>
+<a href="https://www.spaceappschallenge.org/2026/challenges/adapting-farms-with-nasa-data/" target="_blank" rel="noopener">Conocer el reto Field Shift  ↗</a>
+</div>
+<div class="steps">
+<article><h3>Explora cualquier parcela del mundo</h3><p>Descripción:
+Activa tu ubicación, busca una localidad o ingresa sus coordenadas. Selecciona el terreno en el mapa y obtén un análisis personalizado de sus condiciones agrícolas.</p><a href="../mapa" target="_top">Explorar el mapa mundial  ↗</a></article>
+<article><h3>Comprende el clima de tu parcela</h3><p>Consulta variables de NASA POWER como temperatura, precipitaciones, humedad y radiación solar. Complementa el análisis con imágenes de ECOSTRESS para conocer mejor las condiciones del terreno durante el periodo seleccionado.</p></article>
+<article><h3>Compara y planifica tus rotaciones</h3><p>Contrasta distintas secuencias de cultivo, conoce su demanda estimada de agua y evalúa cómo mantienen la cobertura del suelo. Planifica una producción más eficiente y sostenible.</p></article>
+</div>
+</section>
+</div>
+<section id="video" class="video-section" aria-labelledby="video-title">
+  <div class="wrap">
+    <h2 id="video-title">TerraCode en 40 segundos</h2>
+    <p>Del planeta a tu parcela: conoce cómo convertimos datos de la NASA en información útil para tomar mejores decisiones agrícolas.</p>
+    <div id="project-video" data-youtube-url="">
+      <video controls playsinline preload="none" poster="video-poster.webp" width="960" height="540" aria-label="Video explicativo de TerraSprout">
+        <source src="terrasprout.mp4" type="video/mp4">
+        <track src="terrasprout-es.vtt" kind="subtitles" srclang="es" label="Español">
+      </video>
+    </div>
+  </div>
+</section>
+<section id="equipo" class="team"><div class="wrap">
+<p class="label">Quiénes somos</p>
+<h2>Equipo TerraCode</h2>
+<p>Somos un equipo multidisciplinario de Ica, Perú, unido por una misión: acercar la tecnología espacial a la agricultura y convertir datos complejos en decisiones útiles para el campo.</p>
+<ul id="members" class="members" aria-label="Integrantes de TerraCode"></ul>
+<a href="https://www.spaceappschallenge.org/2026/find-a-team/terrasprout/?tab=members" target="_blank" rel="noopener">Ver integrantes en NASA Space Apps ↗</a>
+</div></section>
+</main>
+<footer class="site-footer" data-site-footer></footer>
+<a class="assistant-globe" href="/asistente" target="_top"
+   aria-label="Abrir asistente agrícola" title="Abrir asistente agrícola"></a>
+</body>
+</html>

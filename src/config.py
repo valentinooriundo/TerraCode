@@ -11,5 +11,9 @@ LOGOUT_ENDPOINT = os.getenv("TERRACODE_LOGOUT_ENDPOINT", "/api/auth/logout")
 GOOGLE_INICIO_ENDPOINT = "/api/auth/google/inicio"
 GOOGLE_SESION_ENDPOINT = "/api/auth/google/sesion"
 
+# Explorador de TerraSprout (src/explorador.py, mapa y datos NASA). Solo en la versión web: si está vacío, el home no
+# muestra la tarjeta. En el VPS: https://explorador.<dominio>/
+EXPLORADOR_URL = os.getenv("TERRACODE_EXPLORADOR_URL", "").strip()
+
 # Segundos máximos de espera por respuesta del backend.
 REQUEST_TIMEOUT = float(os.getenv("TERRACODE_REQUEST_TIMEOUT", "10"))

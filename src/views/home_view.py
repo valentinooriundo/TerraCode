@@ -3,6 +3,7 @@ from typing import Callable
 
 import flet as ft
 
+import config
 import theme
 
 from services.auth_service import Session
@@ -142,6 +143,13 @@ def build_home_view(
                         lambda e: on_clima()),
         ],
     )
+    if page.web and config.EXPLORADOR_URL:
+        # El explorador es otra app (otro servidor): se abre en otra pestaña para no cerrar esta sesión
+        async def abrir_explorador(e):
+            await ft.UrlLauncher().launch_url(config.EXPLORADOR_URL, web_only_window_name="_blank")
+
+        actions.controls.append(action_card(ft.Icons.PUBLIC, "Explorador", "Mapa y datos NASA de tu zona",
+                                            abrir_explorador))
 
     tip = ft.Container(
         padding=16,

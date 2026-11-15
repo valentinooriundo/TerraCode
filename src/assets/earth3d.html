@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Globo de TerraSprout</title>
+<style>
+html,body,#earth{margin:0;width:100%;height:100%;overflow:hidden;background:#030610 url("./space.svg") center/cover}
+#hint{position:absolute;left:16px;top:14px;color:#d5e5f6;background:#101f32e8;padding:10px 14px;border-radius:12px;font:13px system-ui;pointer-events:none}
+#controls{position:absolute;left:16px;bottom:18px;display:flex;flex-wrap:wrap;gap:6px;border:1px solid #334b65;padding:5px;border-radius:16px;background:#101f32e8}
+button{background:#233b55;color:#f3f8ff;border:0;border-radius:20px;min-width:42px;min-height:40px;padding:0 12px;font:600 13px system-ui;cursor:pointer}
+button:hover{background:#355775}button:focus-visible{outline:2px solid #9bd1ff}
+.journey,.journey body{background:transparent}
+.journey #earth{background:transparent url("./earth--75.webp") center/contain no-repeat}
+.journey.ready #earth{background:none}
+.journey #controls,.journey #hint{display:none}
+@media(max-width:420px){#hint{left:12px;right:12px;font-size:12px}#controls{left:12px;bottom:12px;max-width:calc(100% - 24px)}button{padding-inline:9px}}
+</style>
+<div id="earth"></div><div id="hint" role="status">Cargando globo 3D…</div>
+<nav id="controls" aria-label="Vista del planeta">
+  <button id="out" type="button" aria-label="Alejar">−</button>
+  <button id="in" type="button" aria-label="Acercar">+</button>
+  <button id="reset" type="button">Vista mundial</button>
+</nav>
+<div id="selection" hidden role="status" style="position:absolute;right:16px;top:14px;padding:12px;border-radius:12px;background:#101f32;color:#fff;font:14px system-ui">
+  <output id="coordinates"></output>
+  <button id="analyze" type="button">Analizar punto</button>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/globe.gl@2.45.0/dist/globe.gl.min.js"></script>
+<script>
+const hint = document.getElementById("hint");
+const journeyMode = new URLSearchParams(location.search).get("vista") === "recorrido";
+document.documentElement.classList.toggle("journey", journeyMode);
+try {
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const globe = new Globe(document.getElementById("earth"), {
+    animateIn: !reducedMotion,
+    rendererConfig: { antialias: true, alpha: journeyMode }
+  }).globeImageUrl("./globe-earth-hd.webp")
+    .backgroundColor(journeyMode ? "#00000000" : "#030610")
+    .atmosphereColor("#64a7e6").atmosphereAltitude(.13)
+    .pointColor(() => "#c7ff75").pointRadius(.7).pointAltitude(.02)
+    .onGlobeReady(() => {
+      document.documentElement.classList.add("ready");
+      hint.textContent = "Arrastra para girar · toca un punto para seleccionarlo";
+    });
+  if (!journeyMode) globe.backgroundImageUrl("./space.svg");
+  const selectPoint = ({lat,lng}) => {
+      if (Math.abs(lat) > 85) {
+        hint.hidden = false;
+        hint.textContent = "Elige un punto entre 85° S y 85° N para abrirlo en el mapa.";
+        return;
+      }
+      const latitude = lat.toFixed(6);
+      const longitude = (((lng + 180) % 360 + 360) % 360 - 180).toFixed(6);
+      globe.pointsData([{lat, lng}]);
+      document.getElementById("coordinates").textContent = latitude + ", " + longitude;
+      document.getElementById("selection").hidden = false;
+      hint.hidden = true;
+      document.getElementById("analyze").onclick = () => {
+        const destination = new URL("./mapa", location.href);
+        destination.searchParams.set("punto", latitude + "," + longitude);
+        window.top.location.assign(destination.href);
+      };
+  };
+  globe.onGlobeClick(selectPoint);
+  const home = () => ({lat: 12, lng: 0, altitude: Math.min(4.5, Math.max(2.05, innerHeight / innerWidth * 1.25 + .8))});
+  globe.pointOfView(home(),0);
+  globe.lights().forEach(light => {
+    if (light.isAmbientLight) light.intensity = 2.4;
+  });
+  globe.controls().enableDamping = true;
+  globe.controls().enablePan = false;
+  const minAltitude = .72;
+  const maxAltitude = 4.5;
+  const radius = globe.getGlobeRadius();
+  const controls = globe.controls();
+  if (journeyMode) {
+    controls.enabled = false;
+    globe.enablePointerInteraction(false);
+    const moveCamera = progress => globe.pointOfView({
+      lat: 12 + 10 * Math.sin(progress * Math.PI * 2),
+      lng: -95 + 310 * progress,
+      altitude: home().altitude * (1 - .12 * Math.sin(progress * Math.PI))
+    }, 0);
+    if (!reducedMotion) moveCamera(0);
+    addEventListener("message", event => {
+      if (event.origin !== location.origin || event.source !== parent ||
+          event.data?.type !== "terra-journey" || reducedMotion) return;
+      const progress = Number(event.data.progress);
+      if (!Number.isFinite(progress) || progress < 0 || progress > 1) return;
+      moveCamera(progress);
+    });
+  }
+  controls.minDistance = radius * (1 + minAltitude);
+  controls.maxDistance = radius * (1 + maxAltitude);
+  const changeZoom = multiplier => {
+    const {lat,lng,altitude} = globe.pointOfView();
+    const next = Math.max(minAltitude, Math.min(maxAltitude, altitude * multiplier));
+    globe.pointOfView({lat,lng,altitude:next}, 0);
+  };
+  document.getElementById("out").onclick = () => changeZoom(1.25);
+  document.getElementById("in").onclick = () => changeZoom(.8);
+  document.getElementById("reset").onclick = () => {
+    document.getElementById("selection").hidden = true;
+    hint.hidden = false;
+    globe.pointsData([]);
+    globe.pointOfView(home(),reducedMotion ? 0 : 450);
+  };
+  new ResizeObserver(() => globe.width(innerWidth).height(innerHeight)).observe(document.body);
+} catch (_) {
+  hint.textContent = "Globo 3D no disponible. Usa el buscador o vuelve al globo ligero.";
+}
+</script>
+</html>

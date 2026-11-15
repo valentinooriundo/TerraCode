@@ -1,6 +1,7 @@
 # Python
 __pycache__/
 *.py[cod]
+*.egg-info/
 
 # Virtual environments
 .venv/
@@ -9,6 +10,8 @@ env/
 
 # Environments / secrets
 .env
+.env.*
+!.env.example
 
 # Tool caches
 .mypy_cache/
@@ -18,10 +21,18 @@ env/
 # Flet
 .flet/
 build/
+dist/
 
 # IDE
 .idea/
 .vscode/
 
-# macOS
+# Operating systems
 .DS_Store
+Thumbs.db
+
+# Geographic datasets
+data/gaez_v5/*.tif
+
+# Temporary files
+*.log
