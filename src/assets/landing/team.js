@@ -1,4 +1,5 @@
 const roster = document.querySelector('#members');
+const memberText = window.terraLanguage?.tr || ((es) => es);
 
 async function showMembers() {
   const response = await fetch('equipo.json');
@@ -19,6 +20,8 @@ async function showMembers() {
       item.append(initials);
     }
     const label = document.createElement('span');
+    label.setAttribute('translate', 'no');
+    label.className = 'notranslate';
     label.textContent = name;
     item.append(label);
     const verified = linkedin && /^https:\/\/www\.linkedin\.com\/in\/[\w%-]+\/?$/.test(linkedin);
@@ -27,7 +30,7 @@ async function showMembers() {
     profile.href = verified ? linkedin : 'https://www.linkedin.com/search/results/people/?keywords=' + encodeURIComponent(name);
     profile.target = '_blank';
     profile.rel = 'noopener';
-    profile.textContent = verified ? 'LinkedIn' : 'Buscar en LinkedIn';
+    profile.textContent = verified ? 'LinkedIn' : memberText('Buscar en LinkedIn', 'Find on LinkedIn');
     profile.setAttribute('aria-label', profile.textContent + ': ' + name);
     item.append(profile);
     roster.append(item);
@@ -36,6 +39,6 @@ async function showMembers() {
 
 showMembers().catch(() => {
   const item = document.createElement('li');
-  item.textContent = 'Consulta la lista en la ficha oficial.';
+  item.textContent = memberText('Consulta la lista en la ficha oficial.', 'See the team on the official project page.');
   roster.replaceChildren(item);
 });

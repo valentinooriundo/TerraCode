@@ -3,6 +3,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Cultivos 3D · TerraSprout</title>
+<link rel="stylesheet" href="./terra-language.css">
+<script src="./terra-language.js"></script>
+<script>
+const viewerMode = new URLSearchParams(location.search).get("visor");
+if (viewerMode === "chat" || viewerMode === "amplio") {
+  document.documentElement.classList.add("chat-preview");
+}
+if (viewerMode === "amplio") document.documentElement.classList.add("expanded-preview");
+</script>
 <link rel="stylesheet" href="./assistant-globe.css?v=modal-2">
 <script type="module" src="./assistant-launcher.js?v=modal-2"></script>
 <style>
@@ -23,6 +32,21 @@ border-radius:10px;padding:8px 11px;cursor:pointer;min-height:36px}
 button[aria-pressed=true]{background:#bde69d;color:#112417;border-color:#bde69d}
 button:focus-visible,a:focus-visible{outline:2px solid #fff;outline-offset:3px}
 @media(max-width:680px){.gallery{grid-template-columns:1fr}header,main{padding:12px}}
+.chat-preview header,.chat-preview h1,.chat-preview aside,.chat-preview .assistant-globe { display:none }
+.chat-preview,.chat-preview body { height:100%; overflow:hidden }
+.chat-preview main { padding:0; height:100% }
+.chat-preview .gallery { display:block }
+.chat-preview .gallery { height:100% }
+.chat-preview .stage { border:0; border-radius:0; height:100%; display:grid; grid-template-rows:minmax(0,1fr) auto }
+.chat-preview .stage h2 { position:absolute; top:0; left:0; z-index:1; font-size:.82rem; padding:8px 10px; pointer-events:none }
+.chat-preview #scene { height:auto; min-height:0; overflow:hidden }
+.chat-preview .actions { padding:3px 8px; gap:5px }
+.chat-preview .actions button { min-height:32px; padding:4px 10px }
+.chat-preview #status:not(.viewer-error) { display:none }
+.chat-preview #status { font-size:.72rem }
+.expanded-preview .stage h2 { font-size:clamp(1rem, 3vw, 1.55rem); padding:16px }
+.expanded-preview .actions { padding:10px; justify-content:center }
+.stage:fullscreen { width:100%; height:100%; background:#142c23 }
 </style>
 <header><strong>TerraSprout</strong><nav><a target="_top" href="/">Inicio</a> · <a target="_top" href="/mapa">Mapa</a></nav></header>
 <main>
@@ -36,6 +60,7 @@ button:focus-visible,a:focus-visible{outline:2px solid #fff;outline-offset:3px}
         <button id="right" aria-label="Girar a la derecha">↷</button>
         <button id="out" aria-label="Alejar">−</button>
         <button id="in" aria-label="Acercar">+</button>
+        <button id="fullscreen" type="button" hidden>Pantalla completa</button>
         <span id="status" role="status">Cargando visor 3D…</span>
       </div>
     </section>
@@ -53,13 +78,62 @@ button:focus-visible,a:focus-visible{outline:2px solid #fff;outline-offset:3px}
 </script>
 <script type="module">
 const status = document.querySelector("#status");
+const { tr, url, selector } = window.terraLanguage;
+const nav = document.querySelector("header nav");
+const links = nav.querySelectorAll("a");
+links[0].textContent = tr("Inicio", "Home");
+links[1].textContent = tr("Mapa", "Map");
+for (const link of links) link.href = url(link.href);
+if (!document.documentElement.classList.contains("chat-preview")) selector(nav);
+document.querySelector("h1").textContent = tr("Cultivos 3D", "3D crops");
+document.querySelector("#parts").previousElementSibling.textContent = tr("Partes del modelo", "Model parts");
+document.querySelector("#crops").previousElementSibling.textContent = tr("Cultivos", "Crops");
+document.querySelector("#water").previousElementSibling.textContent = tr("Sistemas de riego", "Irrigation");
+const full = document.querySelector("#fullscreen");
+const stage = document.querySelector(".stage");
+const embedded = viewerMode === "chat";
+const frame = embedded ? window.frameElement : null;
+const fullTarget = frame || stage;
+const fullDocument = fullTarget.ownerDocument;
+const updateFullLabel = () => {
+  const label = fullDocument.fullscreenElement ? tr("Salir de pantalla completa", "Exit full screen")
+    : tr("Pantalla completa", "Full screen");
+  full.setAttribute("aria-label", label);
+  full.title = label;
+  full.textContent = embedded ? "⛶" : label;
+};
+const openExpanded = () => {
+  const target = new URL(location.href);
+  target.searchParams.set("visor", "amplio");
+  window.open(target.href, "_blank", "noopener");
+};
+full.hidden = false;
+updateFullLabel();
+full.addEventListener("click", async () => {
+  if (!fullDocument.fullscreenEnabled) {
+    if (embedded) openExpanded();
+    return;
+  }
+  try {
+    if (fullDocument.fullscreenElement) await fullDocument.exitFullscreen();
+    else await fullTarget.requestFullscreen();
+  } catch (error) {
+    if (embedded) openExpanded();
+    console.warn("Fullscreen unavailable", error);
+  }
+});
+fullDocument.addEventListener("fullscreenchange", updateFullLabel);
 try {
-  const { mountGallery } = await import("./crops3d.js");
+  const [{ mountGallery }, { connectCropScene }] = await Promise.all([
+    import("./crops3d.js?v=riego-5"), import("./crop-scene-state.js?v=riego-5"),
+  ]);
   const params = new URLSearchParams(location.search);
-  mountGallery({ crop: params.get("cultivo"), irrigation: params.get("riego") });
-  status.textContent = "Arrastra para girar · desplaza para acercar";
+  const viewer = mountGallery({ crop: params.get("cultivo"), irrigation: params.get("riego") });
+  if (embedded) connectCropScene(viewer, params.get("estado"));
+  status.textContent = tr("Arrastra para girar · desplaza para acercar", "Drag to rotate · scroll to zoom");
 } catch (error) {
-  status.textContent = "No se pudo abrir el visor 3D. Recarga la página o comprueba WebGL.";
+  status.classList.add("viewer-error");
+  status.textContent = tr("No se pudo abrir el visor 3D. Recarga la página o comprueba WebGL.", "Could not open the 3D viewer. Reload or check WebGL.");
   console.error(error);
 }
 </script>

@@ -40,7 +40,9 @@ GEMINI_MODEL=gemini-3.6-flash
 Abre el botón de chat en Inicio, Mapa o Cultivos. Para recibir opciones
 locales, selecciona una parcela en el mapa y pregunta qué sembrar o qué
 escenario de agua evaluar. La respuesta usa el período de referencia del
-predictor. Si Gemini no está disponible, el chat muestra las primeras
+predictor y distingue el histórico de NASA POWER de la estimación de
+TerraSprout. Las opciones con modelo tienen una vista 3D dentro del chat.
+Si Gemini no está disponible, el chat muestra las primeras
 opciones calculadas por escenario cuando hay datos.
 
 Para reutilizar el componente en una vista Flet, crea una instancia de
@@ -58,8 +60,9 @@ assistant.button.visible = True
 assistant.set_parcel(latitude, longitude, label)
 ```
 
-El historial se conserva en memoria durante la sesión de Flet. El servidor
-limita las solicitudes a Gemini a 20 por minuto por proceso.
+El selector del chat permite volver a abrir hasta 15 conversaciones
+guardadas en este navegador, con hasta 40 mensajes por conversación.
+El servidor limita las solicitudes a Gemini a 20 por minuto por proceso.
 
 ## Usar el explorador
 

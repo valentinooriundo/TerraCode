@@ -30,6 +30,18 @@ const systems = [
   ["Riego por gravedad", "gravity"],
   ["Secano", "rainfed"],
 ];
+const waterEnglish = ["Crop only", "Drip irrigation", "Gravity irrigation", "Rainfed"];
+const partEnglish = {
+  "Modelo completo": "Whole model", "Tallos": "Stems", "Tronco y ramas": "Trunk and branches",
+  "Pseudotallo": "Pseudostem", "Hojas": "Leaves", "Mazorca": "Ear", "Vainas": "Pods",
+  "Tubérculos": "Tubers", "Flores": "Flowers", "Racimo": "Bunch", "Espiga con aristas": "Awned head",
+  "Raíz de reserva": "Storage root", "Vainas de garbanzo": "Chickpea pods", "Frutos cítricos": "Citrus fruit",
+  "Mazorca de cacao": "Cacao pod", "Cerezas de café": "Coffee cherries", "Cápsulas abiertas": "Open bolls",
+  "Vainas largas": "Long pods", "Vainas subterráneas": "Underground pods", "Aceitunas": "Olives",
+  "Bulbo": "Bulb", "Vainas de soya": "Soybean pods", "Raíces de reserva": "Storage roots",
+  "Tomates": "Tomatoes", "Espiga": "Grain head", "Lluvia": "Rain", "Agua": "Water",
+  "Tuberías y goteros": "Pipes and emitters", "Surcos": "Furrows",
+};
 const cropCodes = [
   "mze", "phb", "wpo", "alf", "ban", "brl", "car", "chk", "cit", "coc",
   "cof", "cot", "cow", "grd", "olv", "oni", "soy", "spo", "tom", "whe",
@@ -176,6 +188,7 @@ function irrigation(group, method, crop, parts) {
 }
 
 export function mountGallery({ crop = "mze", irrigation: method = "none" } = {}) {
+  const english = window.terraLanguage?.lang === "en";
   const stage = document.querySelector("#scene");
   const renderer = new T.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -208,7 +221,8 @@ export function mountGallery({ crop = "mze", irrigation: method = "none" } = {})
     const options = [["Modelo completo", null], ...parts];
     for (const [label, part] of options) {
       const button = document.createElement("button");
-      button.textContent = label;
+      button.textContent = english
+        ? (partEnglish[label] || (label.startsWith("Hileras de ") ? "Crop rows" : label)) : label;
       button.setAttribute("aria-pressed", String(part === null));
       button.addEventListener("click", () => {
         for (const [, group] of parts) group.visible = part === null || part === group;
@@ -227,21 +241,33 @@ export function mountGallery({ crop = "mze", irrigation: method = "none" } = {})
     document.querySelector(target).append(button);
     return button;
   }
-  const cropButtons = crops.map(([label], index) => addChoice("#crops", label, () => {
-    cropIndex = index;
-    updateModel();
-  }));
-  const waterButtons = systems.map(([label, value]) => addChoice("#water", label, () => {
-    waterMode = value;
-    updateModel();
+  const cropButtons = crops.map(([label], index) => {
+    const control = addChoice("#crops", label, () => {
+      cropIndex = index;
+      updateModel();
+    });
+    control.setAttribute("translate", "no");
+    return control;
+  });
+  const waterButtons = new Map(systems.map(([label, value], index) => {
+    const button = addChoice("#water", english ? waterEnglish[index] : label, () => {
+      waterMode = value;
+      updateModel();
+    });
+    return [value, button];
   }));
 
   function updateModel() {
     const currentCrop = crops[cropIndex];
     const waterIndex = systems.findIndex(([, value]) => value === waterMode);
     cropButtons.forEach((button, index) => button.setAttribute("aria-pressed", String(index === cropIndex)));
-    waterButtons.forEach((button, index) => button.setAttribute("aria-pressed", String(index === waterIndex)));
-    heading.textContent = waterMode === "none" ? currentCrop[0] : `${currentCrop[0]} · ${systems[waterIndex][0]}`;
+    waterButtons.forEach((button, mode) => button.setAttribute("aria-pressed", String(mode === waterMode)));
+    const waterLabel = english ? waterEnglish[waterIndex] : systems[waterIndex][0];
+    const cropName = document.createElement("span");
+    cropName.setAttribute("translate", "no");
+    cropName.textContent = currentCrop[0];
+    heading.replaceChildren(cropName);
+    if (waterMode !== "none") heading.append(` · ${waterLabel}`);
     model.clear();
     shape(model, box, 0x775537, 0,-.12,0, 2.9,.24,2.4);
     const parts = [];
@@ -272,4 +298,11 @@ export function mountGallery({ crop = "mze", irrigation: method = "none" } = {})
   }).observe(stage);
   orbit.update();
   updateModel();
+  return {
+    setIrrigation(mode) {
+      if (mode === waterMode || !waterButtons.has(mode)) return;
+      waterMode = mode;
+      updateModel();
+    },
+  };
 }

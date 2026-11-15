@@ -17,6 +17,8 @@ import nasa
 import map_provider
 from globe_view import GlobeView
 from assistant_view import AssistantView
+from crop_scene import crop_scene_controls
+from parcel_report import parcel_pdf
 from place_search import find_places, google_location, google_places, google_search_enabled
 from uuid import uuid4
 
@@ -61,22 +63,36 @@ async def main(page: ft.Page):
     page.bgcolor = "#EFF4EF"
     page.padding = 0
     page.spacing = 0
+    lang = "en" if page.web and page.query.to_dict.get("lang") == "en" else "es"
+    def tr(es, en):
+        return en if lang == "en" else es
+
     if page.web and urlsplit(page.route or "").path.rstrip("/") == "/asistente":
-        AssistantView(page, embedded=True).mount_embedded()
+        params = page.query.to_dict
+        chat = AssistantView(page, embedded=True, full_page=params.get("panel") != "1", lang=lang)
+        point = params.get("punto", "")
+        try:
+            latitude, longitude = map(float, point.split(","))
+        except (TypeError, ValueError):
+            pass
+        else:
+            if -85 <= latitude <= 85 and -180 <= longitude <= 180:
+                chat.set_parcel(latitude, longitude, (params.get("zona") or "Parcela seleccionada")[:120])
+        await chat.mount_embedded()
         return
-    assistant = AssistantView(page) if page.web else None
+    assistant = AssistantView(page, lang=lang) if page.web else None
     origin = browser_url(page.url)
     project_url = origin._replace(path="/landing/inicio.html",
-                                  query="", fragment="").geturl()
-    home_url = origin._replace(path="/", query="", fragment="").geturl()
-    map_url = origin._replace(path="/mapa", query="", fragment="").geturl()
+                                  query=f"lang={lang}" if "lang" in page.query.to_dict else "", fragment="").geturl()
+    home_url = origin._replace(path="/", query=f"lang={lang}", fragment="").geturl()
+    map_url = origin._replace(path="/mapa", query=f"lang={lang}", fragment="").geturl()
     chrome_url = origin._replace(path="/landing/chrome.html", query="", fragment="").geturl()
     globe_url = globe_document_url(page.url) if page.web and getenv("GLOBE_MODE", "3d") == "3d" else None
     use_3d = globe_url is not None
 
     geo = gps.Geolocator()
     page.services.append(geo)
-    coords = ft.Text("Toca el mapa para seleccionar la parcela.", selectable=True)
+    coords = ft.Text(tr("Toca el mapa para seleccionar la parcela.", "Tap the map to select a plot."), selectable=True)
     status = ft.Text()
     location_status = ft.Text(color="#FFFFFF", size=13)
     toast_job = None
@@ -109,8 +125,8 @@ async def main(page: ft.Page):
             ft.Text("Selecciona una parcela para analizar rotaciones.")
         ]
     )
-    lat = ft.TextField(label="Latitud", width=155)
-    lon = ft.TextField(label="Longitud", width=155)
+    lat = ft.TextField(label=tr("Latitud", "Latitude"), width=155)
+    lon = ft.TextField(label=tr("Longitud", "Longitude"), width=155)
     end = ft.TextField(label="Hasta (AAAA-MM-DD)", value=str(date.today()), width=180)
     start = ft.TextField(label="Desde (AAAA-MM-DD)", value=str(date.today() - timedelta(days=89)), width=180)
     version = 0
@@ -250,7 +266,7 @@ async def main(page: ft.Page):
         position_revision += 1
         revision = position_revision
         location_button.disabled = True
-        location_button.tooltip = "Buscando ubicación…"
+        location_button.tooltip = tr("Buscando ubicación…", "Finding your location…")
         notify("Buscando ubicación… Si aparece el permiso, elige Permitir.", dismiss=False)
         try:
             # The browser requests permission through getCurrentPosition itself.
@@ -279,7 +295,7 @@ async def main(page: ft.Page):
         finally:
             locating = False
             location_button.disabled = False
-            location_button.tooltip = "Mi ubicación"
+            location_button.tooltip = tr("Mi ubicación", "My location")
             page.update()
         if revision == position_revision:
             if position.accuracy is None or not 0 < position.accuracy <= 100:
@@ -304,8 +320,45 @@ async def main(page: ft.Page):
             return
         await select(latitude, longitude)
 
+    report_data = None
+    report_busy = False
+    report_ready = False
+    file_picker = ft.FilePicker() if page.web else None
+    if file_picker:
+        page.services.append(file_picker)
+
+    async def download_report(_):
+        nonlocal report_busy
+        if not report_data or not report_ready or report_busy:
+            return
+        report_busy = True
+        report_button.disabled = True
+        page.update()
+        snapshot = dict(report_data)
+        try:
+            content = await asyncio.to_thread(parcel_pdf, snapshot, lang)
+            await file_picker.save_file(
+                file_name=tr("TerraSprout-ficha-parcela.pdf", "TerraSprout-plot-factsheet.pdf"),
+                file_type=ft.FilePickerFileType.CUSTOM, allowed_extensions=["pdf"], src_bytes=content,
+            )
+        except Exception:
+            logging.getLogger(__name__).exception("Could not export plot factsheet")
+            notify(tr("No se pudo descargar la ficha PDF.", "Could not download the PDF."), "#75372B")
+        finally:
+            report_busy = False
+            report_button.disabled = not report_ready
+            page.update()
+
+    report_button = ft.TextButton(
+        tr("Imprimir ficha PDF", "Print plot PDF"), icon=ft.Icons.PRINT_OUTLINED,
+        tooltip=tr("Descargar ficha técnica PDF", "Download plot factsheet PDF"),
+        on_click=download_report, disabled=True,
+        style=ft.ButtonStyle(bgcolor="#D8F88E", color="#102623"),
+    )
+
     async def select(latitude, longitude, name="Parcela seleccionada"):
         nonlocal version, position_revision, scene_request, climate_job, scene_job, selection_key, provider_focus
+        nonlocal report_data, report_ready
         if drawing:
             notify("Cierra o cancela el dibujo antes de cambiar de lugar.", "#775019")
             return
@@ -324,6 +377,9 @@ async def main(page: ft.Page):
         if name == "Parcela seleccionada" and key == selection_key and climate_job and not climate_job.done():
             return
         selection_key = key
+        report_ready = False
+        report_button.disabled = True
+        report_data = {"name": name, "latitude": latitude, "longitude": longitude, "start": first, "end": last}
         if assistant:
             assistant.set_parcel(latitude, longitude, name)
         for job in (climate_job, scene_job):
@@ -367,11 +423,13 @@ async def main(page: ft.Page):
             except Exception:
                 pass
 
-        async def update(panel, fetch, render):
+        async def update(panel, fetch, render, report_key=None):
             try:
                 data = await asyncio.to_thread(fetch, latitude, longitude, first, last)
                 if current == version:
                     panel.controls = render(data)
+                    if report_key:
+                        report_data[report_key] = data
             except Exception as error:
                 logging.getLogger(__name__).warning("NASA %s: %s", fetch.__name__, type(error).__name__)
                 if current == version:
@@ -380,7 +438,7 @@ async def main(page: ft.Page):
                             return
                         panel.controls = [ft.ProgressBar(), ft.Text("Consultando NASA…")]
                         panel.update()
-                        await update(panel, fetch, render)
+                        await update(panel, fetch, render, report_key)
 
                     panel.controls = [
                         ft.Text("NASA no respondió. Puedes reintentar esta consulta."),
@@ -396,14 +454,19 @@ async def main(page: ft.Page):
 
         scene_request = load_scenes
         async def load_climate():
+            nonlocal report_ready
             await asyncio.sleep(.22)
 
             await asyncio.gather(
                 focus(),
-                update(climate, nasa.climate, climate_panel),
-                update(soil_panel, nasa.soil, render_soil),
-                update(crop_panel, predictor.compare, render_crop_scenarios),
+                update(climate, nasa.climate, climate_panel, "climate"),
+                update(soil_panel, nasa.soil, render_soil, "soil"),
+                update(crop_panel, predictor.compare, render_crop_scenarios, "crops"),
             )
+            if current == version:
+                report_ready = True
+                report_button.disabled = report_busy
+                page.update()
         climate_job = asyncio.create_task(load_climate())
 
     def climate_panel(data):
@@ -527,147 +590,56 @@ async def main(page: ft.Page):
             ),
         ]
 
-    def render_crops(data):
-
-                scenario = {
-                        "rainfed": "Secano",
-                        "irrigated_gravity": "Riego por gravedad",
-                        "irrigated_drip": "Riego por goteo",
-                    }.get(data["water_supply"], "Desconocido")
-
-                controls = [
-                    ft.Text(
-                        "Recomendaciones agrícolas",
-                        size=22,
-                        weight=ft.FontWeight.BOLD
-                    ),
-                    ft.Text(
-                        "TerraSprout AI · Random Forest",
-                        color="#17604A"
-                    ),
-                    ft.Text(
-                        f"Referencia histórica: 1981-2010 · {scenario}",
-                        size=12
-                    )
-                ]
-                
-
-                avocado = data.get("avocado_gaez_v5")
-
-                if avocado is not None:
-                    controls.append(
-                        ft.Container(
-                            bgcolor="#E4F2E9",
-                            padding=15,
-                            border_radius=12,
-                            content=ft.Column([
-                                ft.Text(
-                                    "Palta",
-                                    size=20,
-                                    weight=ft.FontWeight.BOLD
-                                ),
-                                ft.Text(
-                                    f"Índice de aptitud: {avocado:.2f}/100"
-                                    ),
-                                    ft.ProgressBar(
-                                        value=avocado / 100,
-                                        color="#17604A"
-                                    ),
-                                    ft.Text(
-                                        "FAO GAEZ V5 · 2001-2020",
-                                        size=12
-                                    ),
-                                    ft.Text(
-                                        "Referencia bajo riego y manejo intensivo",
-                                        size=11
-                                    )
-                                ])
-                            )
-                        )
-
-                for item in data["recommendations"]:
-    
-                    score = item["score"]
-    
-                    controls.append(
-                        ft.Container(
-                            bgcolor="#E4F2E9",
-                            padding=15,
-                            border_radius=12,
-                            content=ft.Column([
-                                ft.Text(
-                                    item["crop"],
-                                    size=20,
-                                    weight=ft.FontWeight.BOLD
-                                ),
-                                ft.Text(
-                                    f"Índice de aptitud: {score:.2f}/100"
-                                ),
-                                ft.ProgressBar(
-                                    value=score / 100,
-                                    color="#17604A",
-                                    bgcolor="#C9DFD1"
-                                )
-                            ])
-                        )
-                    )
-    
-                controls.append(
-                    ft.Text(
-                        "Estimación experimental. No garantiza "
-                        "el rendimiento ni el éxito de la cosecha.",
-                        size=12,
-                    )
-                )
-    
-                return controls
+    def crop_preview_controls(code, scenario, scores):
+        if page.web:
+            return crop_scene_controls(page, code, scenario, scores, preferences=assistant.preferences,
+                                       height=190, lang=lang)
+        return [ft.Text(" · ".join(f"{mode}: {score:g}/100" for mode, score in scores.items()), size=12)]
 
     def render_crop_scenarios(data):
-
         rotation_panel.controls = render_rotation_scenarios(data)
-
-        results = ft.Column(
-            controls=render_crops(data["rainfed"])
-        )
-
-        async def show_rainfed(e):
-            results.controls = render_crops(data["rainfed"])
-            page.update()
-
-        async def show_irrigated(e):
-            results.controls = render_crops(data["irrigated_gravity"])
-            page.update()
-
-        async def show_drip(e):
-            results.controls = render_crops(data["irrigated_drip"])
-            page.update()
-
-        return [
-            ft.Text(
-                "Sistema de suministro de agua",
-                weight=ft.FontWeight.BOLD,
-                size=16,
-            ),
-            ft.Row(
-                controls=[
-                    ft.TextButton(
-                        "Secano",
-                        on_click=show_rainfed,
-                    ),
-                    ft.TextButton(
-                        "Gravedad",
-                        on_click=show_irrigated,
-                    ),
-                    ft.TextButton(
-                        "Goteo",
-                        on_click=show_drip,
-                    ),
-                ],
-                wrap=True,
-            ),
-            ft.Divider(),
-            results,
+        names, scores = {}, {}
+        water_labels = {
+            "rainfed": tr("Secano", "Rainfed"),
+            "irrigated_gravity": tr("Gravedad", "Gravity"),
+            "irrigated_drip": tr("Goteo", "Drip"),
+        }
+        for scenario, result in data.items():
+            for item in result["recommendations"]:
+                if item["score"] > 0:
+                    names[item["code"]] = item["crop"]
+                    scores.setdefault(item["code"], {})[scenario] = item["score"]
+        period = next((value.get("reference_period") for value in data.values() if value.get("reference_period")), "")
+        controls = [
+            ft.Text(tr("Aptitud por cultivo", "Suitability by crop"), size=20, weight=ft.FontWeight.BOLD),
+            ft.Text(tr("Escenarios con puntuación positiva · NASA POWER", "Positive-score scenarios · NASA POWER"), size=12),
+            ft.Text(period, size=12, color="#285344"),
         ]
+        for code, by_water in sorted(scores.items(), key=lambda pair: (-max(pair[1].values()), names[pair[0]])):
+            best = max(by_water, key=by_water.get)
+            controls.append(ft.Container(
+                bgcolor="#E4F2E9", padding=12, border_radius=12,
+                content=ft.Column([
+                    ft.Text(names[code], size=18, weight=ft.FontWeight.BOLD),
+                    *crop_preview_controls(code, best, by_water),
+                ], spacing=5),
+            ))
+        if not scores:
+            controls.append(ft.Text(tr("Ningún cultivo obtuvo una puntuación positiva en este punto.",
+                                       "No crop received a positive score at this point.")))
+        avocado = [
+            f"{water_labels[scenario]} · {result['avocado_gaez_v5']:.2f}/100"
+            for scenario, result in data.items() if (result.get("avocado_gaez_v5") or 0) > 0
+        ]
+        if avocado:
+            controls.append(ft.Container(
+                bgcolor="#E4F2E9", padding=12, border_radius=12,
+                content=ft.Column([ft.Text(tr("Palta", "Avocado"), size=18, weight=ft.FontWeight.BOLD),
+                                   ft.Text(" · ".join(avocado)), ft.Text("FAO GAEZ V5 · 2001-2020", size=12)]),
+            ))
+        controls.append(ft.Text(tr("La puntuación orienta la comparación. Confirma el agua disponible en campo.",
+                                   "Scores help compare options. Confirm water availability in the field."), size=12))
+        return controls
 
     def render_rotation_scenarios(data):
 
@@ -713,6 +685,8 @@ async def main(page: ft.Page):
                 data[water_selector.value],
                 previous_crop=crop_selector.value,
             )
+            if report_data is not None:
+                report_data["rotation"] = result
             controls = [
                 ft.Text(
                     result["message"],
@@ -748,6 +722,8 @@ async def main(page: ft.Page):
                                     f"Aptitud: {item['score']:.2f}/100"
                                 ),
                                 ft.Text(item["reason"]),
+                                *crop_preview_controls(item["code"], water_selector.value,
+                                                       {water_selector.value: item["score"]}),
                             ]
                         ),
                     )
@@ -930,11 +906,16 @@ async def main(page: ft.Page):
                 content=ft.Text(str(i), size=12, color="#FFFFFF"),
             )) for i, point in enumerate(vertices, 1)
         ]
-        parcel_status.value = f"{len(vertices)} vértices. Toca el mapa para añadir otro." if drawing else "Dibuja el perímetro tocando el mapa."
+        count = len(vertices)
+        parcel_status.value = tr(f"{count} vértices.", f"{count} vertices.") if drawing else tr(
+            "Dibuja el perímetro tocando el mapa.", "Tap the map to draw a boundary."
+        )
         draw_hint.value = (
-            f"Toca la nueva posición del vértice {selected_vertex + 1}."
+            tr(f"Toca la nueva posición del vértice {selected_vertex + 1}.",
+               f"Tap the new position for vertex {selected_vertex + 1}.")
             if selected_vertex is not None else
-            f"{len(vertices)} vértices. Toca el mapa para añadir. Toca un número para moverlo."
+            tr(f"{count} vértices. Toca el mapa para añadir o un número para moverlo.",
+               f"{count} vertices. Tap the map to add one or a number to move it.")
         )
         page.update()
 
@@ -983,7 +964,7 @@ async def main(page: ft.Page):
     def finish_parcel(_):
         nonlocal drawing, selected_vertex
         if not drawing or len({(p.latitude, p.longitude) for p in vertices}) < 3:
-            draw_hint.value = "Añade al menos tres vértices distintos."
+            draw_hint.value = tr("Añade al menos tres vértices distintos.", "Add at least three distinct vertices.")
             page.update()
             return
         pairs = list(zip(vertices, vertices[1:] + vertices[:1]))
@@ -992,7 +973,8 @@ async def main(page: ft.Page):
             * (sin(radians(a.latitude)) + sin(radians(b.latitude))) for a, b in pairs
         )) * 6371008.8 ** 2 / 2
         if area < 1:
-            draw_hint.value = "El contorno no encierra área suficiente. Ajusta los vértices."
+            draw_hint.value = tr("El contorno no encierra área suficiente. Ajusta los vértices.",
+                                 "The boundary encloses too little area. Adjust the vertices.")
             page.update()
             return
         drawing = False
@@ -1021,26 +1003,36 @@ async def main(page: ft.Page):
         "Cultivos": crop_panel,
         "Rotaciones": rotation_panel,
     }
+    if page.web:
+        panels = {name: panels[name] for name in ("Clima", "Suelo", "Cultivos", "Rotaciones")}
     panel = ft.Container(content=climate, bgcolor="#FFFFFF", padding=18, border_radius=16)
+    crop_results_panel = ft.Container(content=crop_panel, bgcolor="#FFFFFF", padding=14, border_radius=14) if page.web else None
+    active_tabs = {"left": "Clima", "right": "Cultivos"}
+
+    def panel_side(name):
+        return "right" if page.web and name in {"Cultivos", "Rotaciones"} else "left"
 
     def highlight_tab(name):
+        active_tabs[panel_side(name)] = name
         for tab in tabs:
-            active = tab.data == name
+            active = tab.data == active_tabs[panel_side(tab.data)]
             tab.style = ft.ButtonStyle(bgcolor="#17604A" if active else "#E3EFE8",
                                        color="#FFFFFF" if active else "#214D3A")
 
     async def show_panel(event):
         nonlocal scene_request, scene_job
-        panel.content = panels[event.control.data]
+        name = event.control.data
+        target = crop_results_panel if panel_side(name) == "right" else panel
+        target.content = panels[name]
         highlight_tab(event.control.data)
         page.update()
         if event.control.data == "ECOSTRESS" and scene_request:
             fetch_scenes, scene_request = scene_request, None
             scene_job = asyncio.create_task(fetch_scenes())
 
-    location_button = ft.Button(
-        "Mi ubicación", on_click=locate, tooltip="Mi ubicación",
-        style=ft.ButtonStyle(bgcolor="#E8F6FF", color="#123250"),
+    location_button = ft.IconButton(
+        ft.Icons.MY_LOCATION, on_click=locate, tooltip=tr("Mi ubicación", "My location"),
+        bgcolor="#E8F6FF", icon_color="#123250",
         visible=not use_3d,
     )
     async def select_from_globe(latitude, longitude):
@@ -1103,40 +1095,56 @@ async def main(page: ft.Page):
     for field in (lat, lon, start, end):
         field.col = 6
         field.width = None
-    tabs = [ft.TextButton(name, data=name, on_click=show_panel) for name in panels]
+    panel_names_en = {"Clima": "Climate", "Suelo": "Soil", "Parcela": "Plot",
+                      "Cultivos": "Crops", "Rotaciones": "Rotations"}
+    tabs = [ft.TextButton(tr(name, panel_names_en.get(name, name)), data=name, on_click=show_panel)
+            for name in panels]
     highlight_tab("Clima")
     content_scroll = ft.Column([
         panel,
-        ft.ExpansionTile(title=ft.Text("Coordenadas y fechas"), controls=[
+        ft.ExpansionTile(title=ft.Text(tr("Coordenadas y fechas", "Coordinates and dates")), controls=[
             ft.Container(padding=ft.Padding.symmetric(vertical=10), content=ft.Column([
                 ft.ResponsiveRow([lat, lon, start, end], spacing=8, run_spacing=12),
-                button("Aplicar cambios", manual), status,
+                button(tr("Aplicar cambios", "Apply changes"), manual), status,
             ])),
         ]),
     ], scroll=ft.ScrollMode.AUTO, expand=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
     drawer = ft.Container(
-        width=420, visible=False, bgcolor="#F3F7F3", padding=16,
+        width=420, visible=page.web, bgcolor="#EAF2EB" if page.web else "#F3F7F3", padding=13,
+        border_radius=16 if page.web else None,
         content=ft.Column([
-            ft.Row([ft.Text("Análisis de parcela", size=22, weight=ft.FontWeight.BOLD),
-                    ft.IconButton(ft.Icons.CLOSE, tooltip="Cerrar panel", on_click=close_drawer)],
+            ft.Row([ft.Text(tr("Clima y suelo", "Climate and soil") if page.web else
+                            tr("Análisis de parcela", "Plot analysis"), size=19, weight=ft.FontWeight.BOLD, expand=True),
+                    *([] if page.web else [ft.IconButton(ft.Icons.CLOSE, tooltip="Cerrar panel", on_click=close_drawer)])],
                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             coords,
-            ft.Row(tabs, wrap=True, spacing=6, run_spacing=6),
+            *([report_button] if page.web else []),
+            ft.Row([tab for tab in tabs if panel_side(tab.data) == "left"], wrap=True, spacing=5, run_spacing=5),
             content_scroll,
         ], expand=True),
     )
+    if page.web:
+        crop_drawer = ft.Container(
+            bgcolor="#EAF2EB", padding=13, border_radius=16,
+            content=ft.Column([
+                ft.Text(tr("Cultivos y rotaciones", "Crops and rotations"), size=19, weight=ft.FontWeight.BOLD),
+                ft.Row([tab for tab in tabs if panel_side(tab.data) == "right"], wrap=True, spacing=5),
+                ft.Column([crop_results_panel], scroll=ft.ScrollMode.AUTO, expand=True,
+                          horizontal_alignment=ft.CrossAxisAlignment.STRETCH),
+            ], expand=True),
+        )
     map_credit = ft.Container(left=12, bottom=10, right=92, visible=False,
                               alignment=ft.Alignment.CENTER_LEFT, content=ft.Container(
                                   bgcolor="#18382D", padding=7, border_radius=8, content=attribution,
                               ))
     draw_tools.left, draw_tools.right, draw_tools.bottom = 8, 8, 88
     draw_tools.padding, draw_tools.bgcolor, draw_tools.border_radius = 8, "#FFFFFF", 10
-    finish_button = button("Guardar contorno", finish_parcel)
-    undo_button = ft.IconButton(ft.Icons.UNDO, tooltip="Quitar último vértice", on_click=undo)
-    draw_tools.content = ft.Column([ft.Text("Dibujar parcela", weight=ft.FontWeight.BOLD), draw_hint, ft.Row([
+    finish_button = button(tr("Guardar contorno", "Save boundary"), finish_parcel)
+    undo_button = ft.IconButton(ft.Icons.UNDO, tooltip=tr("Quitar último vértice", "Undo last vertex"), on_click=undo)
+    draw_tools.content = ft.Column([ft.Text(tr("Dibujar parcela", "Draw plot"), weight=ft.FontWeight.BOLD), draw_hint, ft.Row([
         undo_button,
         finish_button,
-        ft.TextButton("Cancelar", on_click=cancel_draw),
+        ft.TextButton(tr("Cancelar", "Cancel"), on_click=cancel_draw),
     ], wrap=True)], tight=True, spacing=2)
     toast = ft.Container(top=65, right=12, width=300, padding=12, border_radius=12,
                          content=location_status, visible=False, ignore_interactions=True)
@@ -1144,7 +1152,7 @@ async def main(page: ft.Page):
         ft.Image(src="space.svg", left=0, right=0, top=0, bottom=0, fit=ft.BoxFit.COVER),
         welcome_layer, map_area,
         map_credit,
-        draw_tools,
+        *([] if page.web else [draw_tools]),
         ft.Container(right=22, bottom=38, content=location_button),
         toast,
     ], expand=True)
@@ -1154,30 +1162,48 @@ async def main(page: ft.Page):
                               on_click=toggle_globe, bgcolor="#152940", icon_color="#E5F3FF"),
     )
     map_stack.controls.insert(-1, globe_switch)
-    map_surface = ft.Container(content=map_stack, bgcolor="#030610", expand=True)
+    map_surface = ft.Container(
+        content=map_stack, bgcolor="#030610", expand=True,
+        border_radius=16 if page.web else None, clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+    )
     compact_layout = None
 
     def resize(_=None):
         nonlocal compact_layout
         if not provider_started:
             globe.initial_zoom = max(MAP_START_ZOOM, ceil(log(max(256, page.width or 800) / 256, 2)))
-        compact = bool(page.width and page.width < 760)
+        compact = bool(page.width and page.width < (1060 if page.web else 760))
         drawer.width = None if compact else min(460, max(330, (page.width or 1100) * .35))
         if page.web:
             width = page.width or 800
             header_view.height = 138 if width <= 510 else 112 if width <= 800 else 73
-            root.height = max(420, (page.height or 800) - header_view.height)
-        drawer.height = min(500, (page.height or 700) * .57) if compact else None
+            drawer.width = None if compact else min(330, max(244, width * .23))
+            crop_drawer.width = None if compact else drawer.width
+            map_surface.height = max(360, min(560, (page.height or 800) * .66)) if compact else None
+            map_surface.expand = not compact
+            drawer.height = crop_drawer.height = 470 if compact else None
+        else:
+            drawer.height = min(500, (page.height or 700) * .57) if compact else None
         toast.width = min(300, max(140, (page.width or 800) - 24))
         if compact != compact_layout:
-            layout_type = ft.Column if compact else ft.Row
-            root.content = layout_type([map_surface, drawer], expand=True, spacing=0)
+            if page.web:
+                root.content = ft.Column(
+                    [map_surface, drawer, crop_drawer], spacing=10, scroll=ft.ScrollMode.AUTO,
+                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                ) if compact else ft.Row(
+                    [drawer, map_surface, crop_drawer], spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.STRETCH,
+                )
+            else:
+                layout_type = ft.Column if compact else ft.Row
+                root.content = layout_type([map_surface, drawer], expand=True, spacing=0)
             compact_layout = compact
         welcome.resize_globe(page.width or 800, page.height or 700)
         page.update()
 
-    root = ft.Container(expand=True)
-    place_input = ft.TextField(hint_text="Buscar ciudad o localidad", prefix_icon=ft.Icons.SEARCH,
+    root = ft.Container(expand=True, padding=10 if page.web else 0,
+                        bgcolor="#081B18" if page.web else None)
+    place_input = ft.TextField(hint_text=tr("Buscar ciudad o localidad", "Search for a city or town"), prefix_icon=ft.Icons.SEARCH,
                                border=ft.OutlineInputBorder(border_radius=24),
                                dense=True, autofocus=True, expand=True)
     place_results = ft.Column(scroll=ft.ScrollMode.AUTO, height=230)
@@ -1274,7 +1300,7 @@ async def main(page: ft.Page):
             ft.Row([place_input]),
             place_results, search_credit,
         ], width=365, tight=True),
-        actions=[ft.TextButton("Cerrar", on_click=close_search)],
+        actions=[ft.TextButton(tr("Cerrar", "Close"), on_click=close_search)],
     )
 
     def open_search(_):
@@ -1291,23 +1317,21 @@ async def main(page: ft.Page):
         page.show_dialog(search_dialog)
 
     map_stack.controls.insert(-1, ft.Container(right=14, top=14, content=ft.Row([
-        ft.IconButton(ft.Icons.EDIT_LOCATION_ALT_OUTLINED, tooltip="Dibujar parcela",
-                      bgcolor="#E8F6FF", icon_color="#123250", on_click=draw_parcel),
-        ft.Button("Buscar", icon=ft.Icons.SEARCH, on_click=open_search,
+        *([] if page.web else [ft.IconButton(
+            ft.Icons.EDIT_LOCATION_ALT_OUTLINED, tooltip="Dibujar parcela", on_click=draw_parcel,
+            bgcolor="#E8F6FF", icon_color="#123250",
+        )]),
+        ft.Button(tr("Buscar", "Search"), icon=ft.Icons.SEARCH, on_click=open_search,
                   style=ft.ButtonStyle(bgcolor="#E8F6FF", color="#123250")),
     ], spacing=6)))
     reopen_analysis = ft.IconButton(ft.Icons.ANALYTICS_OUTLINED, tooltip="Abrir análisis",
                                     on_click=open_drawer, icon_color="#DCF5E9")
-    if page.web:
-        map_stack.controls.append(ft.Container(left=14, top=14, content=reopen_analysis))
-        reopen_analysis.bgcolor = "#E8F6FF"
-        reopen_analysis.icon_color = "#123250"
 
     def explore_map(_):
         show_map()
         page.update()
 
-    explore_button = ft.TextButton("Mapa", icon=ft.Icons.MAP_OUTLINED,
+    explore_button = ft.TextButton(tr("Mapa", "Map"), icon=ft.Icons.MAP_OUTLINED,
                                    url=map_url if page.web else None,
                                    on_click=None if page.web else explore_map,
                                    style=ft.ButtonStyle(color="#DCF5E9"))
@@ -1330,12 +1354,10 @@ async def main(page: ft.Page):
     if page.web:
         crops_url = origin._replace(path="/crops3d.html", query="", fragment="").geturl()
         crops_view = fwv.WebView(url=crops_url, expand=True, visible=False)
-        header_view = fwv.WebView(url=f"{chrome_url}?vista=header&pagina=mapa", height=73)
-        footer_view = fwv.WebView(url=f"{chrome_url}?vista=footer", height=300)
-        root.expand = False
-        map_page = ft.Column([root, footer_view], scroll=ft.ScrollMode.AUTO, expand=True, spacing=0)
+        header_view = fwv.WebView(url=f"{chrome_url}?vista=header&pagina=mapa&lang={lang}", height=73)
+        map_page = root
         page.add(header_view, map_page, landing, crops_view)
-        assistant.attach(landing, crops_view, header_view, footer_view)
+        assistant.attach(landing, crops_view, header_view)
     else:
         page.add(toolbar, root)
     page.on_resize = resize
@@ -1367,7 +1389,7 @@ async def main(page: ft.Page):
             if crops_view.visible:
                 assistant.button.visible = False
                 crops_view.url = urlsplit(crops_url)._replace(
-                    query=urlencode({key: params[key] for key in ("cultivo", "riego") if key in params}),
+                    query=urlencode({key: params[key] for key in ("cultivo", "riego", "lang") if key in params}),
                 ).geturl()
                 landing.visible = header_view.visible = map_page.visible = False
                 page.update()

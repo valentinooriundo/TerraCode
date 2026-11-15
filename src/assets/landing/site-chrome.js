@@ -2,32 +2,33 @@ const params = new URLSearchParams(location.search);
 const chromeView = params.get('vista');
 const activePage = params.get('pagina');
 const isStandalone = Boolean(chromeView);
+const { tr, url, selector } = window.terraLanguage;
 
 function section(name) {
-  return isStandalone ? '../?seccion=' + name : '#' + name;
+  return isStandalone ? url('../?seccion=' + name) : '#' + name;
 }
 
 function active(name) {
   return activePage === name ? ' aria-current="page"' : '';
 }
 
-const brand = '<img src="logo.webp" width="40" height="40" alt="">TerraSprout';
+const brand = '<img src="logo.webp" width="40" height="40" alt=""><span translate="no" class="notranslate">TerraSprout</span>';
 const header = document.querySelector('[data-site-header]');
 const footer = document.querySelector('[data-site-footer]');
 
 if (header) {
   header.innerHTML = `<nav class="wrap" aria-label="Navegación principal">
-    <a class="brand" href="${isStandalone ? '../' : '#inicio'}">${brand}</a>
+    <a class="brand" href="${isStandalone ? url('../') : '#inicio'}">${brand}</a>
     <div class="links"><a href="${section('video')}">Video</a>
-    <a href="${section('proyecto')}">Proyecto</a>
-    <a href="${section('equipo')}">Equipo</a>
-    <a href="../mapa" target="_top"${active('mapa')}>Mapa</a>
-    <a href="../cultivos" target="_top">Cultivos 3D</a>
+    <a href="${section('proyecto')}">${tr("Proyecto", "Project")}</a>
+    <a href="${section('equipo')}">${tr("Equipo", "Team")}</a>
+    <a href="${url("../mapa")}" target="_top"${active('mapa')}>${tr("Mapa", "Map")}</a>
     <div class="header-buttons">
-      <button type="button" class="header-button" disabled>Registrarse</button>
-      <button type="button" class="header-button header-button-primary" disabled>Iniciar sesión</button>
+      <button type="button" class="header-button" disabled>${tr("Registrarse", "Sign up")}</button>
+      <button type="button" class="header-button header-button-primary" disabled>${tr("Iniciar sesión", "Sign in")}</button>
     </div></div>
   </nav>`;
+  selector(header.querySelector(".links"), header.querySelector(".header-buttons"));
 }
 
 if (header && !isStandalone) {
@@ -43,16 +44,16 @@ if (header && !isStandalone) {
 
 if (footer) {
   footer.innerHTML = `<div class="wrap">
-    <a class="brand" href="${isStandalone ? '../' : '#inicio'}">${brand}</a>
-    <p>Proyecto del reto Field Shift · NASA Space Apps Challenge 2026</p>
+    <a class="brand" href="${isStandalone ? url('../') : '#inicio'}">${brand}</a>
+    <p>${tr("Proyecto del reto Field Shift", "Field Shift challenge project")} · NASA Space Apps Challenge 2026</p>
     <nav aria-label="Enlaces del pie de página">
-      <a href="${isStandalone ? '../' : '#inicio'}">${isStandalone ? 'Inicio' : 'Volver arriba ↑'}</a>
-      <a href="${section('proyecto')}">Proyecto</a>
+      <a href="${isStandalone ? url('../') : '#inicio'}">${isStandalone ? tr("Inicio", "Home") : tr("Volver arriba ↑", "Back to top ↑")}</a>
+      <a href="${section('proyecto')}">${tr("Proyecto", "Project")}</a>
       <a href="${section('video')}">Video</a>
-      <a href="${section('equipo')}">Equipo</a>
-      <a href="../mapa" target="_top">Mapa mundial ↗</a>
+      <a href="${section('equipo')}">${tr("Equipo", "Team")}</a>
+      <a href="${url("../mapa")}" target="_top">${tr("Mapa mundial ↗", "World map ↗")}</a>
     </nav>
-    <p class="footer-credit">Imágenes Blue Marble de la NASA.</p>
+    <p class="footer-credit">${tr("Imágenes Blue Marble de la NASA.", "NASA Blue Marble imagery.")}</p>
   </div>`;
 }
 
