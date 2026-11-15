@@ -10,7 +10,8 @@ function updateEarth() {
   queued = false;
   if (reducedMotion.matches) return;
   const distance = Math.max(1, journey.offsetHeight - stage.offsetHeight);
-  const offset = parseFloat(getComputedStyle(stage).top) - journey.getBoundingClientRect().top;
+  const top = parseFloat(getComputedStyle(stage).top) || 0;
+  const offset = top - journey.getBoundingClientRect().top;
   const progress = Math.max(0, Math.min(1, offset / distance));
   const longitude = Math.round((-75 + 360 * progress) / 15) * 15;
   const angle = (longitude + 180) % 360 - 180;

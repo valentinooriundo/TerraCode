@@ -22,6 +22,7 @@ if (header) {
     <a href="${section('proyecto')}">Proyecto</a>
     <a href="${section('equipo')}">Equipo</a>
     <a href="../mapa" target="_top"${active('mapa')}>Mapa</a>
+    <a href="../cultivos" target="_top">Cultivos 3D</a>
     <div class="header-buttons">
       <button type="button" class="header-button" disabled>Registrarse</button>
       <button type="button" class="header-button header-button-primary" disabled>Iniciar sesión</button>

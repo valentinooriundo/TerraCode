@@ -26,6 +26,41 @@ py -m pip install -e . "flet[web,cli]==1.1.2"
 & (Join-Path (py -c "import sysconfig; print(sysconfig.get_path('scripts'))") 'flet.exe') run --web --host 0.0.0.0 --port 8551 src/main.py
 ```
 
+## Asistente agrícola web
+
+Agrega estas variables al archivo local `.env` y reinicia Flet. La clave se
+crea en [Google AI Studio](https://aistudio.google.com/apikey) y se configura
+solo en el servidor.
+
+```dotenv
+GEMINI_API_KEY=tu_clave
+GEMINI_MODEL=gemini-3.6-flash
+```
+
+Abre el botón de chat en Inicio, Mapa o Cultivos. Para recibir opciones
+locales, selecciona una parcela en el mapa y pregunta qué sembrar o qué
+escenario de agua evaluar. La respuesta usa el período de referencia del
+predictor. Si Gemini no está disponible, el chat muestra las primeras
+opciones calculadas por escenario cuando hay datos.
+
+Para reutilizar el componente en una vista Flet, crea una instancia de
+`AssistantView` por página web y pasa sus WebView a `attach`. Activa el botón
+nativo cuando la vista carezca de lanzador HTML.
+El selector de parcelas actualiza el contexto mediante `set_parcel`.
+
+```python
+from assistant_view import AssistantView
+
+assistant = AssistantView(page)
+assistant.attach()
+assistant.button.visible = True
+# Cuando el mapa confirme la selección:
+assistant.set_parcel(latitude, longitude, label)
+```
+
+El historial se conserva en memoria durante la sesión de Flet. El servidor
+limita las solicitudes a Gemini a 20 por minuto por proceso.
+
 ## Usar el explorador
 
 1. Gira el globo de bienvenida, pulsa «Mi ubicación» o abre «Mapa» para

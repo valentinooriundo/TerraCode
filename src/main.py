@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from ipaddress import ip_address
 from math import atan, ceil, degrees, log, pi, radians, sin, sinh, tan
 from statistics import mean
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 import flet as ft
 import flet.canvas as cv
@@ -16,6 +16,7 @@ import flet_webview as fwv
 import nasa
 import map_provider
 from globe_view import GlobeView
+from assistant_view import AssistantView
 from place_search import find_places, google_location, google_places, google_search_enabled
 from uuid import uuid4
 
@@ -60,6 +61,10 @@ async def main(page: ft.Page):
     page.bgcolor = "#EFF4EF"
     page.padding = 0
     page.spacing = 0
+    if page.web and urlsplit(page.route or "").path.rstrip("/") == "/asistente":
+        AssistantView(page, embedded=True).mount_embedded()
+        return
+    assistant = AssistantView(page) if page.web else None
     origin = browser_url(page.url)
     project_url = origin._replace(path="/landing/inicio.html",
                                   query="", fragment="").geturl()
@@ -319,6 +324,8 @@ async def main(page: ft.Page):
         if name == "Parcela seleccionada" and key == selection_key and climate_job and not climate_job.done():
             return
         selection_key = key
+        if assistant:
+            assistant.set_parcel(latitude, longitude, name)
         for job in (climate_job, scene_job):
             if job and not job.done():
                 job.cancel()
@@ -1158,7 +1165,7 @@ async def main(page: ft.Page):
         drawer.width = None if compact else min(460, max(330, (page.width or 1100) * .35))
         if page.web:
             width = page.width or 800
-            header_view.height = 138 if width <= 510 else 112 if width <= 680 else 73
+            header_view.height = 138 if width <= 510 else 112 if width <= 800 else 73
             root.height = max(420, (page.height or 800) - header_view.height)
         drawer.height = min(500, (page.height or 700) * .57) if compact else None
         toast.width = min(300, max(140, (page.width or 800) - 24))
@@ -1321,11 +1328,14 @@ async def main(page: ft.Page):
         ], spacing=2))
     landing = fwv.WebView(url=project_url, expand=True, visible=False) if page.web else None
     if page.web:
+        crops_url = origin._replace(path="/crops3d.html", query="", fragment="").geturl()
+        crops_view = fwv.WebView(url=crops_url, expand=True, visible=False)
         header_view = fwv.WebView(url=f"{chrome_url}?vista=header&pagina=mapa", height=73)
         footer_view = fwv.WebView(url=f"{chrome_url}?vista=footer", height=300)
         root.expand = False
         map_page = ft.Column([root, footer_view], scroll=ft.ScrollMode.AUTO, expand=True, spacing=0)
-        page.add(header_view, map_page, landing)
+        page.add(header_view, map_page, landing, crops_view)
+        assistant.attach(landing, crops_view, header_view, footer_view)
     else:
         page.add(toolbar, root)
     page.on_resize = resize
@@ -1352,8 +1362,19 @@ async def main(page: ft.Page):
     if page.web:
         async def open_route(route):
             path = urlsplit(route or "").path.rstrip("/")
+            params = page.query.to_dict
+            crops_view.visible = path == "/cultivos"
+            if crops_view.visible:
+                assistant.button.visible = False
+                crops_view.url = urlsplit(crops_url)._replace(
+                    query=urlencode({key: params[key] for key in ("cultivo", "riego") if key in params}),
+                ).geturl()
+                landing.visible = header_view.visible = map_page.visible = False
+                page.update()
+                return
             show_landing = path not in {"/mapa", "/globo"} and not page.query.to_dict.get("punto")
             landing.visible = show_landing
+            assistant.button.visible = not show_landing
             header_view.visible = map_page.visible = not show_landing
             section = page.query.to_dict.get("seccion")
             if show_landing and section in {"video", "proyecto", "equipo"}:
