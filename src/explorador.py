@@ -98,6 +98,7 @@ async def main(page: ft.Page):
         return
     assistant = AssistantView(page, lang=lang) if page.web else None
     origin = browser_url(page.url)
+    can_use_gps = not page.web or web_location_allowed(page.url)
     project_url = origin._replace(path="/landing/inicio.html",
                                   query=f"lang={lang}" if "lang" in page.query.to_dict else "", fragment="").geturl()
     home_url = origin._replace(path="/", query=f"lang={lang}", fragment="").geturl()
@@ -282,9 +283,9 @@ async def main(page: ft.Page):
         nonlocal position_revision, locating, gps_position
         if locating:
             return
-        if page.web and not web_location_allowed(page.url):
+        if not can_use_gps:
             show_map()
-            notify("Activa HTTPS para usar el GPS o marca la parcela en el mapa.", "#775019")
+            open_search(event)
             return
         locating = True
         gps_position = None
@@ -1109,7 +1110,9 @@ async def main(page: ft.Page):
             scene_job = asyncio.create_task(fetch_scenes())
 
     location_button = ft.IconButton(
-        ft.Icons.MY_LOCATION, on_click=locate, tooltip=tr("Mi ubicación", "My location"),
+        ft.Icons.MY_LOCATION if can_use_gps else ft.Icons.SEARCH,
+        on_click=locate,
+        tooltip=tr("Mi ubicación", "My location") if can_use_gps else tr("Buscar zona", "Find a place"),
         bgcolor="#E8F6FF", icon_color="#123250",
         visible=not use_3d,
     )
@@ -1145,7 +1148,7 @@ async def main(page: ft.Page):
         map_credit.visible = True
         map_toolbar.visible = True
         explore_button.visible = False
-        location_button.visible = True
+        location_button.visible = can_use_gps
         globe_switch.visible = False
 
     def return_to_globe(_):
@@ -1398,6 +1401,7 @@ async def main(page: ft.Page):
         place_results.controls = []
         search_credit.value = "Google Maps" if using_google else "Open-Meteo · GeoNames"
         page.show_dialog(search_dialog)
+        page.update()
 
     map_stack.controls.insert(-1, ft.Container(right=14, top=14, content=ft.Row([
         *([] if page.web else [ft.Button(
