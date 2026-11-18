@@ -8,9 +8,18 @@ authors = [
     { name = "Flet developer", email = "you@example.com" }
 ]
 dependencies = [
-    "flet==1.1.2",
-    "flet-map==1.1.2",
+    "flet>=1.1.2",
+    # GPS del celular para el registro de campo
     "flet-geolocator==1.1.2",
+    # Certificados raíz para HTTPS (api.rapiditto.com) dentro del APK y en Windows
+    "certifi>=2024.8.30",
+]
+
+[dependency-groups]
+# Explorador de TerraSprout (src/explorador.py): solo en la versión web, que corre en el servidor. No va en
+# [project].dependencies para que el APK no tenga que compilar rasterio, scipy ni scikit-learn.
+explorador = [
+    "flet-map==1.1.2",
     "flet-webview==1.1.2",
     "Pillow>=11.3",
     "python-dotenv>=1,<2",
@@ -23,8 +32,6 @@ dependencies = [
     "scipy==1.15.3",
     "reportlab>=4,<5",
 ]
-
-[dependency-groups]
 dev = [
     "flet-cli>=1.1.2",
     "flet-desktop>=1.1.2",
@@ -40,9 +47,9 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 
 [tool.flet]
-org = "com.mycompany"
-product = "terracode"
-company = "Flet"
+org = "com.terracode"
+product = "TerraCode"
+company = "TerraCode"
 copyright = "Copyright (C) 2023-2026 by Flet"
 
 # src/assets/icon.png is the icon for every platform. Keep it transparent and
@@ -55,6 +62,10 @@ copyright = "Copyright (C) 2023-2026 by Flet"
 [tool.flet.app]
 path = "src"
 
+# Ubicación de la parcela en el registro de campo
 [tool.flet.android.permission]
 "android.permission.ACCESS_FINE_LOCATION" = true
 "android.permission.ACCESS_COARSE_LOCATION" = true
+
+[tool.flet.ios.info]
+NSLocationWhenInUseUsageDescription = "TerraCode usa tu ubicación para registrar la parcela y recomendar cultivos."
